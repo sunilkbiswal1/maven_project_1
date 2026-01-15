@@ -7,21 +7,20 @@ pipeline {
 
   environment {
     SONAR_URL = "http://192.168.0.110:9000"
+    DOCKER_IMAGE= "sunilkumar45/ultimate-cicd:${BUILD_NUMBER}"
+    REGISTRY_CREDENTIALS = credentials('docker-cred')
   }
 
   stages {
-    stage('checkout') {
+    stage('Checkout') {
       steps {
-        sh 'echo passed'
-        git branch: 'main', url : 'https://github.com/iam-veeramalla/Jenkins-Zero-To-Hero.git'
+        git branch: 'main', url: 'https://github.com/sunilkbiswal1/maven_project_1.git'
       }
     }
 
     stage('Build & Test') {
       steps {
-        sh 'ls -ltr'
-        // build the project and create a Jar file 
-        sh 'cd  java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn clean package'
+        sh 'mvn clean package'
       }
     }
 
@@ -29,19 +28,38 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'sonarqube', variable:'SONAR_AUTH_TOKEN')]) {
           sh """
-             cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && \
-             mvn sonar:sonar
-             -Dsonar.login = $SONAR_AUTH_TOKEN && \
-             -Dsonar.host.url = ${SONAR_URL}
+            mvn sonar:sonar \
+            -Dsonar.login=${SONAR_AUTH_TOKEN} \
+            -Dsonar.host.url=${SONAR_URL}
           """
         }
       }
     }
 
-    stage('Docker Image Build') {
+    stage('Docker Image Build & Push') {
       steps {
-        
+        script {
+          sh "docker build -t ${DOCKER_IMAGE} ."
+          def dockerImage = docker.image("${DOCKER_IMAGE}")
+          docker.withRegistry('https://index.docker.io/v1/', 'docker-cred') {
+            dockerImage.push()
+            dockerImage.push('latest')
+          }
+        }
       }
+    }
+  }
+
+  post {
+    success {
+      echo "Pipeline completed successfully"
+    }
+    failure {
+      echo "Pipeline failed"
+    }
+    always {
+      sh 'docker logout'
+      cleanWs()
     }
   }
 }
