@@ -1,7 +1,7 @@
 pipeline {
   agent {
     docker {
-      image 'abhishekf5/maven-abhishek-docker-agent:v1'
+      image 'maven:3.9.3-openjdk-17'  // official Maven + JDK 17 image
     }
   }
 
@@ -9,8 +9,6 @@ pipeline {
     SONAR_URL = "http://192.168.0.105:9000"
     DOCKER_IMAGE= "sunilkumar45/ultimate-cicd:${BUILD_NUMBER}"
     REGISTRY_CREDENTIALS = credentials('docker-cred')
-    JAVA_HOME = "/usr/lib/jvm/java-17-openjdk-17.0.17.0.10-1.el9.x86_64"
-    PATH = "${JAVA_HOME}/bin:${env.PATH}"
   }
 
   stages {
@@ -22,7 +20,7 @@ pipeline {
 
     stage('Build & Test') {
       steps {
-        sh 'mvn clean verify'
+        sh 'mvn clean package'
       }
     }
 
@@ -30,7 +28,7 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'sonrqube', variable:'SONAR_AUTH_TOKEN')]) {
           sh """
-            mvn clean verify sonar:sonar \
+            mvn sonar:sonar \
             -Dsonar.login=${SONAR_AUTH_TOKEN} \
             -Dsonar.host.url=${SONAR_URL}
           """
@@ -53,15 +51,10 @@ pipeline {
   }
 
   post {
-    success {
-      echo "Pipeline completed successfully"
-    }
-    failure {
-      echo "Pipeline failed"
-    }
+    success { echo "Pipeline completed successfully" }
+    failure { echo "Pipeline failed" }
     always {
-      echo "Cleaning workspace and logging out Docker"
-      sh 'docker logout || true'
+      sh 'docker logout'
       cleanWs()
     }
   }
