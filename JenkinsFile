@@ -2,24 +2,33 @@ pipeline {
   agent {
     docker {
       image 'maven:3.9.6-eclipse-temurin-17'
-      args '-v /var/run/docker.sock:/var/run/docker.sock'
+      args '-v /var/run/docker.sock:/var/run/docker.sock -u root'
     }
   }
-
   environment {
     SONAR_URL = "http://192.168.0.105:9000"
     DOCKER_IMAGE = "sunilkumar45/ultimate-cicd:${BUILD_NUMBER}"
     REGISTRY_CREDENTIALS = credentials('docker-cred')
   }
-
   stages {
+    stage('Setup Docker') {
+      steps {
+        sh '''
+          apt-get update
+          apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+          curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian bullseye stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+          apt-get update
+          apt-get install -y docker-ce-cli
+        '''
+      }
+    }
     stage('Checkout') {
       steps {
         git branch: 'main',
             url: 'https://github.com/sunilkbiswal1/maven_project_1.git'
       }
     }
-
     stage('Build & Test') {
       steps {
         sh '''
@@ -29,7 +38,6 @@ pipeline {
         '''
       }
     }
-
     stage('Static Code Analysis') {
       steps {
         withCredentials([string(credentialsId: 'sonrqube', variable: 'SONAR_AUTH_TOKEN')]) {
@@ -41,7 +49,6 @@ pipeline {
         }
       }
     }
-
     stage('Docker Image Build & Push') {
       steps {
         script {
@@ -55,11 +62,16 @@ pipeline {
       }
     }
   }
-
   post {
     always {
       sh 'docker logout || true'
       cleanWs()
+    }
+    success {
+      echo 'pipeline executed succesfully'
+    }
+    failure {
+      echo 'pipeline executed failed'
     }
   }
 }
