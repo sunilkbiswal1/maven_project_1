@@ -5,7 +5,6 @@ pipeline {
       args '-v /var/run/docker.sock:/var/run/docker.sock -u root'
     }
   }
-
   environment {
     SONAR_URL = "http://192.168.0.108:9000"
     DOCKER_IMAGE = "sunilkumar45/ultimate-cicd:${BUILD_NUMBER}"
@@ -13,9 +12,7 @@ pipeline {
     GIT_REPO_NAME = "maven_project_1"
     GIT_USER_NAME = "sunilkbiswal1"
   }
-
   stages {
-
     stage('Setup Docker') {
       steps {
         sh '''
@@ -28,14 +25,12 @@ pipeline {
         '''
       }
     }
-
     stage('Checkout') {
       steps {
         git branch: 'main',
             url: 'https://github.com/sunilkbiswal1/maven_project_1.git'
       }
     }
-
     stage('Build & Test') {
       steps {
         sh '''
@@ -45,7 +40,6 @@ pipeline {
         '''
       }
     }
-
     stage('Static Code Analysis') {
       steps {
         withCredentials([string(credentialsId: 'sonrqube', variable: 'SONAR_AUTH_TOKEN')]) {
@@ -58,7 +52,6 @@ pipeline {
         }
       }
     }
-
     stage('Docker Image Build & Push') {
       steps {
         script {
@@ -71,24 +64,40 @@ pipeline {
         }
       }
     }
-
     stage('Update Deployment File') {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
+            # Install git if not present
+            apt-get update && apt-get install -y git
+            
+            # Check if we're in a git directory
+            if [ ! -d .git ]; then
+              echo "Not in a git directory, re-initializing..."
+              git clone https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git temp_repo
+              cp -r temp_repo/.git .
+              rm -rf temp_repo
+            fi
+            
+            # Configure git
             git config user.email "biswalpranati99@gmail.com"
             git config user.name "sunilkbiswal1"
+            
+            # Ensure we're on the right branch
+            git checkout main || git checkout -b main
+            
+            # Update deployment file
             sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" Deployment/deployment.yml
+            
+            # Commit and push changes
             git add Deployment/deployment.yml
-            git commit -m "Update deployment image version ${BUILD_NUMBER}"
-            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+            git commit -m "Update deployment image version ${BUILD_NUMBER}" || echo "No changes to commit"
+            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:main
           '''
         }
       }
     }
-
   }
-
   post {
    /* always {
       sh 'docker logout || true'
