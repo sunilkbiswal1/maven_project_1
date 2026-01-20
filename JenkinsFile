@@ -68,46 +68,58 @@ pipeline {
       steps {
         withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
           sh '''
-            # Install git if not present
+            # Install git
             apt-get update && apt-get install -y git
             
-            # Check if we're in a git directory
-            if [ ! -d .git ]; then
-              echo "Not in a git directory, re-initializing..."
-              git clone https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git temp_repo
-              cp -r temp_repo/.git .
-              rm -rf temp_repo
-            fi
+            # Fresh clone in a new directory
+            cd /tmp
+            rm -rf ${GIT_REPO_NAME}
+            
+            echo "Cloning repository..."
+            git clone https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git
+            cd ${GIT_REPO_NAME}
             
             # Configure git
             git config user.email "biswalpranati99@gmail.com"
             git config user.name "sunilkbiswal1"
             
-            # Ensure we're on the right branch
-            git checkout main || git checkout -b main
+            # Verify the deployment file exists
+            if [ ! -f Deployment/deployment.yml ]; then
+              echo "Error: Deployment/deployment.yml not found!"
+              exit 1
+            fi
             
             # Update deployment file
+            echo "Updating deployment file with build number: ${BUILD_NUMBER}"
             sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" Deployment/deployment.yml
+            
+            # Show what changed
+            echo "Changes made:"
+            git diff Deployment/deployment.yml
             
             # Commit and push changes
             git add Deployment/deployment.yml
-            git commit -m "Update deployment image version ${BUILD_NUMBER}" || echo "No changes to commit"
-            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:main
+            git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+            git push origin main
+            
+            echo "Successfully pushed changes to GitHub"
           '''
         }
       }
     }
   }
   post {
-   /* always {
-      sh 'docker logout || true'
-      cleanWs()
-    } */
+    always {
+      sh '''
+        docker logout || true
+        rm -rf /tmp/${GIT_REPO_NAME} || true
+      '''
+    }
     success {
-      echo 'Pipeline executed successfully'
+      echo 'Pipeline executed successfully! 🎉'
     }
     failure {
-      echo 'Pipeline failed'
+      echo 'Pipeline failed ❌'
     }
   }
 }
